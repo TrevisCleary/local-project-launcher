@@ -406,23 +406,12 @@ h3 {
   color: #6c3932;
 }
 
-.path-line {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
+.resource-stack {
+  display: grid;
   gap: 8px;
-  border: 0;
-  border-radius: 8px;
-  background: #f5f7f6;
-  padding: 0 10px;
-  color: #42544d;
-  font-size: 0.82rem;
-  overflow-wrap: anywhere;
-  text-align: left;
-  cursor: pointer;
 }
 
-.repo-row {
+.resource-row {
   min-height: 42px;
   display: flex;
   align-items: center;
@@ -434,7 +423,7 @@ h3 {
   padding: 7px 8px 7px 10px;
 }
 
-.repo-meta {
+.resource-meta {
   min-width: 0;
   display: flex;
   align-items: center;
@@ -442,24 +431,24 @@ h3 {
   color: #3c4f46;
 }
 
-.repo-meta span {
+.resource-meta span {
   min-width: 0;
 }
 
-.repo-meta strong,
-.repo-meta small {
+.resource-meta strong,
+.resource-meta small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.repo-meta strong {
+.resource-meta strong {
   color: #182820;
   font-size: 0.82rem;
 }
 
-.repo-meta small {
+.resource-meta small {
   color: #66746e;
   font-size: 0.74rem;
 }
@@ -710,7 +699,7 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .repo-row {
+  .resource-row {
     align-items: stretch;
     flex-direction: column;
   }

@@ -5,7 +5,6 @@ import {
   Code2,
   ExternalLink,
   FolderOpen,
-  GitPullRequestArrow,
   Network,
   Pencil,
   Play,
@@ -170,7 +169,6 @@ function App() {
             onStart={() => runAction(selected.id, "start")}
             onStop={() => runAction(selected.id, "stop")}
             onRestart={() => runAction(selected.id, "restart")}
-            onGitSync={() => runAction(selected.id, "git-sync")}
             onSaveDescription={(description) => saveDescription(selected.id, description)}
             onOpenFolder={() => openFolder(selected.id)}
           />
@@ -204,15 +202,16 @@ function Metric({ label, value, icon }) {
   );
 }
 
-function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, onSaveDescription, onOpenFolder }) {
+function ProjectDetail({ project, busy, onStart, onStop, onRestart, onSaveDescription, onOpenFolder }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project.description);
   const isBusy = busy.startsWith(`${project.id}:`);
   const isRunning = project.status === "running";
+  const hasManagedRunning = project.managedRunning || project.services.some((service) => service.managedRunning);
   const canStart = !isBusy && !isRunning && project.services.some((service) => service.available);
-  const canUseRunningActions = !isBusy && isRunning;
+  const canUseManagedActions = !isBusy && hasManagedRunning;
   const primary = project.services.find((service) => service.kind === "primary" && service.port);
-  const canOpenPrimary = canUseRunningActions && primary?.managedRunning && primary?.port;
+  const canOpenPrimary = isRunning && primary?.port && (primary?.managedRunning || primary?.portStatus === "open");
   const primaryUrl = canOpenPrimary ? `http://localhost:${primary.port}` : "";
 
   useEffect(() => {
@@ -241,13 +240,13 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, o
             <Play size={16} />
             Start
           </button>
-          {isRunning ? (
+          {hasManagedRunning ? (
             <>
-              <button className="restart" disabled={!canUseRunningActions} onClick={onRestart}>
+              <button className="restart" disabled={!canUseManagedActions} onClick={onRestart}>
                 <RotateCw size={16} />
                 Restart
               </button>
-              <button className="stop" disabled={!canUseRunningActions} onClick={onStop}>
+              <button className="stop" disabled={!canUseManagedActions} onClick={onStop}>
                 <Square size={15} />
                 Stop
               </button>
@@ -284,22 +283,28 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, o
         <Info label="Status" value={project.status} tone={project.status} />
       </div>
 
-      <button className="path-line" onClick={onOpenFolder}>
-        <FolderOpen size={15} />
-        <span>{project.path}</span>
-      </button>
-
-      <div className="repo-row">
-        <div className="repo-meta">
-          <GitPullRequestArrow size={16} />
-          <span>
-            <strong>Repository</strong>
-            <small>{project.origin || "No remote detected"}</small>
-          </span>
+      <div className="resource-stack">
+        <div className="resource-row">
+          <div className="resource-meta">
+            <FolderOpen size={16} />
+            <span>
+              <strong>Local Directory</strong>
+              <small>{project.path}</small>
+            </span>
+          </div>
+          <button className="secondary-action" onClick={onOpenFolder}>
+            Open Directory
+          </button>
         </div>
-        <button className="secondary-action" disabled={isBusy || !project.origin} onClick={onGitSync}>
-          Git Sync
-        </button>
+        <div className="resource-row">
+          <div className="resource-meta">
+            <ExternalLink size={16} />
+            <span>
+              <strong>Repository</strong>
+              <small>{project.origin || "No remote detected"}</small>
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="detail-scroll">
@@ -393,7 +398,7 @@ function Info({ label, value, tone }) {
 }
 
 function ServiceRow({ service }) {
-  const url = service.port && service.managedRunning ? `http://localhost:${service.port}` : "";
+  const url = service.port && (service.managedRunning || service.portStatus === "open") ? `http://localhost:${service.port}` : "";
   return (
     <div className={`service-row ${service.available ? "" : "unavailable"}`}>
       <div className="service-main">

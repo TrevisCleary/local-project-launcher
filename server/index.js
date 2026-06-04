@@ -245,10 +245,13 @@ async function hydrateStatus(project) {
       portStatus: await checkPort(service.port),
     };
   }));
+  const hasManagedRunning = services.some((service) => service.managedRunning);
+  const hasAssignedPortOpen = services.some((service) => service.portStatus === "open");
 
   return {
     ...project,
-    status: services.some((service) => service.managedRunning) ? "running" : "stopped",
+    managedRunning: hasManagedRunning,
+    status: hasManagedRunning || hasAssignedPortOpen ? "running" : "stopped",
     services,
     logs: managed?.logs || [],
   };
@@ -365,24 +368,6 @@ function stopProcessTree(pid) {
   });
 }
 
-function runProjectCommand(project, command, args, label) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: project.path,
-      windowsHide: true,
-    });
-    appendLog(project.id, `[${label}] ${command} ${args.join(" ")}`);
-    child.stdout.on("data", (data) => appendLog(project.id, `[${label}] ${data}`));
-    child.stderr.on("data", (data) => appendLog(project.id, `[${label}] ${data}`));
-    child.on("error", reject);
-    child.on("exit", (code, signal) => {
-      appendLog(project.id, `[${label}] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-      if (code === 0) resolve();
-      else reject(new Error(`${label} failed with exit code ${code}.`));
-    });
-  });
-}
-
 async function stopProject(projectId) {
   const managed = MANAGED.get(projectId);
   if (!managed) return false;
@@ -435,6 +420,7 @@ app.post("/api/projects/:projectId/stop", async (req, res) => {
   const project = await findProject(projectId);
   if (!project) return res.status(404).json({ error: "Project not found." });
   if (project.status !== "running") return res.status(400).json({ error: "Project is not running." });
+  if (!project.managedRunning) return res.status(400).json({ error: "Project is running outside the launcher." });
   await stopProject(projectId);
   res.json(await findProject(projectId));
 });
@@ -444,23 +430,10 @@ app.post("/api/projects/:projectId/restart", async (req, res) => {
     const project = await findProject(req.params.projectId);
     if (!project) return res.status(404).json({ error: "Project not found." });
     if (project.status !== "running") return res.status(400).json({ error: "Project is not running." });
+    if (!project.managedRunning) return res.status(400).json({ error: "Project is running outside the launcher." });
     await stopProject(project.id);
     await startProject(project);
     res.json(await hydrateStatus(project));
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post("/api/projects/:projectId/git-sync", async (req, res) => {
-  try {
-    const project = await findProject(req.params.projectId);
-    if (!project) return res.status(404).json({ error: "Project not found." });
-    if (!project.origin) return res.status(400).json({ error: "Project has no GitHub remote." });
-    const managed = MANAGED.get(project.id) || { services: new Map(), logs: [] };
-    MANAGED.set(project.id, managed);
-    await runProjectCommand(project, "git.exe", ["pull", "--ff-only"], "git sync");
-    res.json(await findProject(project.id));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

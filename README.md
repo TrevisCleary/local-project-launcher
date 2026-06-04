@@ -35,13 +35,12 @@ npm run dev
 - Restarts services with one Restart button.
 - Hides Open, Restart, and Stop project actions unless the selected project is running.
 - Shows a Port Map modal from the top KPI row with discovered ports and open/closed status.
-- Runs `git pull --ff-only` for a selected project from the Git Sync button when a GitHub remote exists.
 - Infers work vs. personal projects from the GitHub remote owner.
 - Opens project folders in File Explorer from the displayed project path.
 - Stores edited project descriptions in `data/project-overrides.json`, which is ignored by Git.
 - Displays project favicons when a known favicon/icon file exists.
 
-Projects that are already running outside this launcher may show an open port, but the Stop button will not kill externally started processes.
+Projects that are already running outside this launcher are treated as running when one of their assigned ports is open. Stop and Restart are still limited to processes started by this launcher.
 
 ## Refresh Cadence
 
