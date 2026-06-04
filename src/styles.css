@@ -262,7 +262,7 @@ h3 {
 .detail {
   padding: 14px;
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -344,10 +344,6 @@ h3 {
   background: #a8443c;
 }
 
-.git-sync {
-  background: #505f6a;
-}
-
 .icon-button {
   width: 36px;
   height: 36px;
@@ -424,6 +420,65 @@ h3 {
   overflow-wrap: anywhere;
   text-align: left;
   cursor: pointer;
+}
+
+.repo-row {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e0e8e4;
+  border-radius: 8px;
+  background: #fbfcfc;
+  padding: 7px 8px 7px 10px;
+}
+
+.repo-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #3c4f46;
+}
+
+.repo-meta span {
+  min-width: 0;
+}
+
+.repo-meta strong,
+.repo-meta small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-meta strong {
+  color: #182820;
+  font-size: 0.82rem;
+}
+
+.repo-meta small {
+  color: #66746e;
+  font-size: 0.74rem;
+}
+
+.secondary-action {
+  height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid #cfd9d4;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #20332a;
+  padding: 0 10px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .section-title {
@@ -653,6 +708,15 @@ h3 {
 
   .service-row {
     grid-template-columns: 1fr;
+  }
+
+  .repo-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .secondary-action {
+    width: 100%;
   }
 
   .port-node {

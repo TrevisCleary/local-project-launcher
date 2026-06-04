@@ -241,10 +241,6 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, o
             <Play size={16} />
             Start
           </button>
-          <button className="git-sync" disabled={isBusy || !project.origin} onClick={onGitSync}>
-            <GitPullRequestArrow size={16} />
-            Git Sync
-          </button>
           {isRunning ? (
             <>
               <button className="restart" disabled={!canUseRunningActions} onClick={onRestart}>
@@ -292,6 +288,19 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, o
         <FolderOpen size={15} />
         <span>{project.path}</span>
       </button>
+
+      <div className="repo-row">
+        <div className="repo-meta">
+          <GitPullRequestArrow size={16} />
+          <span>
+            <strong>Repository</strong>
+            <small>{project.origin || "No remote detected"}</small>
+          </span>
+        </div>
+        <button className="secondary-action" disabled={isBusy || !project.origin} onClick={onGitSync}>
+          Git Sync
+        </button>
+      </div>
 
       <div className="detail-scroll">
         <div className="section-title">
