@@ -212,7 +212,7 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, o
   const canStart = !isBusy && !isRunning && project.services.some((service) => service.available);
   const canUseRunningActions = !isBusy && isRunning;
   const primary = project.services.find((service) => service.kind === "primary" && service.port);
-  const canOpenPrimary = canUseRunningActions && primary?.managedRunning && primary?.portStatus === "open";
+  const canOpenPrimary = canUseRunningActions && primary?.managedRunning && primary?.port;
   const primaryUrl = canOpenPrimary ? `http://localhost:${primary.port}` : "";
 
   useEffect(() => {
@@ -384,7 +384,7 @@ function Info({ label, value, tone }) {
 }
 
 function ServiceRow({ service }) {
-  const url = service.port && service.managedRunning && service.portStatus === "open" ? `http://localhost:${service.port}` : "";
+  const url = service.port && service.managedRunning ? `http://localhost:${service.port}` : "";
   return (
     <div className={`service-row ${service.available ? "" : "unavailable"}`}>
       <div className="service-main">
