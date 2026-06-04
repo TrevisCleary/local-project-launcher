@@ -7,9 +7,9 @@
     "dev": "concurrently \"npm run server\" \"npm run client\" \"npm run redirect\"",
     "server": "node server/index.js",
     "redirect": "node server/redirect.js",
-    "client": "vite --host localhost --port 3060",
+    "client": "vite --host 127.0.0.1 --port 3060",
     "build": "vite build",
-    "preview": "vite preview --host localhost --port 3060"
+    "preview": "vite preview --host 127.0.0.1 --port 3060"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^6.0.1",
