@@ -464,23 +464,29 @@ function PortTreeModal({ projects, onClose }) {
   );
 }
 
-function RegisterProjectModal({ busy, onSubmit, onClose }) {
-  const [form, setForm] = useState({
-    name: "",
-    audience: "personal",
-    port: "",
-    applicationClassification: "Internal Business Application",
-    technologyStack: "Vite + React + JavaScript",
-    repositoryOwner: "treviscleary",
-    repositoryVisibility: "Private",
-    hostingStrategy: "Vercel",
-    hostingPlatform: "",
-    packageManager: "npm",
-    createStandardDocumentation: true,
-    createGovernanceAssets: true,
-  });
+const DEFAULT_PROJECT_FORM = {
+  name: "",
+  audience: "personal",
+  port: "",
+  applicationClassification: "Internal Business Application",
+  technologyStack: "Vite + React + JavaScript",
+  repositoryOwner: "treviscleary",
+  repositoryVisibility: "Private",
+  hostingStrategy: "Vercel",
+  hostingPlatform: "",
+  packageManager: "npm",
+  createStandardDocumentation: true,
+  createGovernanceAssets: true,
+};
 
-  const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+function RegisterProjectModal({ busy, onSubmit, onClose }) {
+  const [form, setForm] = useState(DEFAULT_PROJECT_FORM);
+  const [dirty, setDirty] = useState(false);
+
+  const setField = (field, value, markDirty = true) => {
+    if (markDirty) setDirty(true);
+    setForm((current) => ({ ...current, [field]: value }));
+  };
   const setAudience = (value) => setForm((current) => ({
     ...current,
     audience: value,
@@ -491,13 +497,30 @@ function RegisterProjectModal({ busy, onSubmit, onClose }) {
     hostingStrategy: value,
     hostingPlatform: value === "Other" ? current.hostingPlatform : "",
   }));
+  const requestClose = () => {
+    if (!dirty || window.confirm("Discard this project registration?")) {
+      onClose();
+    }
+  };
+  const isFormComplete = Boolean(
+    form.name.trim()
+    && Number(form.port) >= 1000
+    && Number(form.port) <= 65535
+    && form.applicationClassification
+    && form.technologyStack
+    && form.repositoryOwner
+    && form.repositoryVisibility
+    && form.hostingStrategy
+    && (form.hostingStrategy !== "Other" || form.hostingPlatform.trim())
+    && form.packageManager
+  );
 
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/ports/next?audience=${form.audience}&kind=primary`)
       .then((response) => response.json())
       .then((data) => {
-        if (!cancelled) setField("port", String(data.port || ""));
+        if (!cancelled) setField("port", String(data.port || ""), false);
       })
       .catch(() => {});
     return () => {
@@ -506,14 +529,14 @@ function RegisterProjectModal({ busy, onSubmit, onClose }) {
   }, [form.audience]);
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="modal-backdrop" role="presentation" onClick={requestClose}>
       <section className="modal register-modal" role="dialog" aria-modal="true" aria-labelledby="register-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <div>
             <p className="eyebrow">Registration</p>
             <h2 id="register-title">Add Project</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close registration">
+          <button className="icon-button" type="button" onClick={requestClose} aria-label="Close registration">
             <X size={18} />
           </button>
         </div>
@@ -521,6 +544,7 @@ function RegisterProjectModal({ busy, onSubmit, onClose }) {
           className="register-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!isFormComplete || busy) return;
             onSubmit({ ...form, port: Number(form.port) });
           }}
         >
@@ -537,7 +561,10 @@ function RegisterProjectModal({ busy, onSubmit, onClose }) {
                   { value: "personal", label: "Personal" },
                   { value: "work", label: "Work" },
                 ]}
-                onChange={setAudience}
+                onChange={(value) => {
+                  setDirty(true);
+                  setAudience(value);
+                }}
               />
             </div>
             <label>
@@ -589,14 +616,17 @@ function RegisterProjectModal({ busy, onSubmit, onClose }) {
             </div>
             <label>
               <span>Hosting strategy</span>
-              <select value={form.hostingStrategy} onChange={(event) => setHostingStrategy(event.target.value)}>
+              <select value={form.hostingStrategy} onChange={(event) => {
+                setDirty(true);
+                setHostingStrategy(event.target.value);
+              }}>
                 <option>Vercel</option>
                 <option>Other</option>
                 <option>None yet</option>
               </select>
             </label>
             {form.hostingStrategy === "Other" ? (
-              <label>
+              <label className="full-row">
                 <span>Hosting platform</span>
                 <input value={form.hostingPlatform} onChange={(event) => setField("hostingPlatform", event.target.value)} placeholder="Name the platform" required />
               </label>
@@ -625,8 +655,8 @@ function RegisterProjectModal({ busy, onSubmit, onClose }) {
           </div>
           <p className="form-note">Registers the project, writes Bootstrap Wizard handoff details, and lets the launcher discover it. It will not start until you click Start.</p>
           <div className="form-actions">
-            <button className="secondary-action" type="button" onClick={onClose}>Cancel</button>
-            <button className="secondary-action primary-secondary" type="submit" disabled={busy}>{busy ? "Adding..." : "Register Project"}</button>
+            <button className="secondary-action" type="button" onClick={requestClose}>Cancel</button>
+            <button className="secondary-action primary-secondary" type="submit" disabled={busy || !isFormComplete}>{busy ? "Adding..." : "Register Project"}</button>
           </div>
         </form>
       </section>

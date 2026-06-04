@@ -790,6 +790,10 @@ h3 {
   gap: 12px;
 }
 
+.full-row {
+  grid-column: 1 / -1;
+}
+
 .register-form label,
 .field-group {
   display: grid;
