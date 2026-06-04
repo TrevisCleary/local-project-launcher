@@ -2,13 +2,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  AlertTriangle,
   Code2,
   ExternalLink,
   FolderOpen,
+  GitBranch,
   GitPullRequestArrow,
   Network,
   Pencil,
   Play,
+  Plus,
   RefreshCw,
   RotateCw,
   Save,
@@ -30,6 +33,7 @@ function App() {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState({ work: true, personal: true });
   const [showPortTree, setShowPortTree] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
 
   async function loadProjects() {
     const response = await fetch("/api/projects");
@@ -82,6 +86,27 @@ function App() {
     await fetch(`/api/projects/${projectId}/open-folder`, { method: "POST" });
   }
 
+  async function registerProject(values) {
+    setBusy("register");
+    try {
+      const response = await fetch("/api/projects/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Registration failed.");
+      }
+      const project = await response.json();
+      await loadProjects();
+      setSelectedId(project.id);
+      setShowRegister(false);
+    } finally {
+      setBusy("");
+    }
+  }
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return projects.filter((project) => {
@@ -121,6 +146,13 @@ function App() {
             <span>
               <strong>Ports</strong>
               <small>Map</small>
+            </span>
+          </button>
+          <button className="metric metric-button" onClick={() => setShowRegister(true)}>
+            <Plus size={18} />
+            <span>
+              <strong>Add</strong>
+              <small>Project</small>
             </span>
           </button>
           <button className="icon-button" onClick={loadProjects} aria-label="Refresh projects">
@@ -180,6 +212,7 @@ function App() {
         )}
       </section>
       {showPortTree ? <PortTreeModal projects={projects} onClose={() => setShowPortTree(false)} /> : null}
+      {showRegister ? <RegisterProjectModal busy={busy === "register"} onSubmit={registerProject} onClose={() => setShowRegister(false)} /> : null}
     </main>
   );
 }
@@ -319,6 +352,11 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onTakeOver, 
                 <small>{project.origin || "No remote detected"}</small>
               </span>
             </div>
+            <div className="repo-badges">
+              {project.git?.branch ? <span><GitBranch size={13} />{project.git.branch}</span> : null}
+              {project.git ? <span className={project.git.dirty ? "warn" : ""}>{project.git.dirty ? "Dirty" : "Clean"}</span> : null}
+              {project.git?.lastSync ? <span>Synced {formatTime(project.git.lastSync)}</span> : null}
+            </div>
             <button className="secondary-action" disabled={isBusy || !project.origin} onClick={onGitSync}>
               Git Sync
             </button>
@@ -336,6 +374,24 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onTakeOver, 
             project.services.map((service) => <ServiceRow key={service.id} service={service} />)
           ) : (
             <div className="empty">No runnable application script found.</div>
+          )}
+        </div>
+
+        <div className="section-title">
+          <Activity size={17} />
+          <h3>Activity</h3>
+        </div>
+        <div className="activity-list">
+          {project.activity?.length ? (
+            project.activity.map((entry) => (
+              <div className="activity-row" key={entry.id}>
+                <strong>{entry.action}</strong>
+                <span>{entry.message}</span>
+                <small>{formatTime(entry.at)}</small>
+              </div>
+            ))
+          ) : (
+            <div className="empty compact-empty">No launcher activity yet.</div>
           )}
         </div>
 
@@ -394,6 +450,7 @@ function PortTreeModal({ projects, onClose }) {
                     <strong>{project.name}</strong>
                     <small>{service.label} · {project.audience} · {service.framework}</small>
                   </div>
+                  {service.portConflict ? <span className="collision"><AlertTriangle size={13} />Conflict</span> : null}
                   <span className={`port-state ${service.managedRunning ? "running" : service.portStatus}`}>{service.managedRunning ? "managed" : service.portStatus}</span>
                 </div>
               );
@@ -402,6 +459,69 @@ function PortTreeModal({ projects, onClose }) {
             <div className="empty">No service ports discovered.</div>
           )}
         </div>
+      </section>
+    </div>
+  );
+}
+
+function RegisterProjectModal({ busy, onSubmit, onClose }) {
+  const [name, setName] = useState("");
+  const [audience, setAudience] = useState("personal");
+  const [port, setPort] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/ports/next?audience=${audience}&kind=primary`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled) setPort(String(data.port || ""));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [audience]);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="modal register-modal" role="dialog" aria-modal="true" aria-labelledby="register-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <p className="eyebrow">Registration</p>
+            <h2 id="register-title">Add Project</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close registration">
+            <X size={18} />
+          </button>
+        </div>
+        <form
+          className="register-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit({ name, audience, port: Number(port) });
+          }}
+        >
+          <label>
+            <span>Project name</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} required />
+          </label>
+          <label>
+            <span>Audience</span>
+            <select value={audience} onChange={(event) => setAudience(event.target.value)}>
+              <option value="personal">Personal</option>
+              <option value="work">Work</option>
+            </select>
+          </label>
+          <label>
+            <span>Assigned port</span>
+            <input type="number" value={port} onChange={(event) => setPort(event.target.value)} min="1000" max="65535" required />
+          </label>
+          <p className="form-note">Creates a minimal runnable project, writes Operations Library handoff docs, starts it, and lets the launcher auto-discover it.</p>
+          <div className="form-actions">
+            <button className="secondary-action" type="button" onClick={onClose}>Cancel</button>
+            <button className="secondary-action primary-secondary" type="submit" disabled={busy}>{busy ? "Adding..." : "Add and Start"}</button>
+          </div>
+        </form>
       </section>
     </div>
   );
@@ -430,6 +550,7 @@ function ServiceRow({ service }) {
       <code>{service.command}</code>
       <div className="service-port">
         <span>{service.port || "Port unknown"}</span>
+        {service.portConflict ? <span className="collision"><AlertTriangle size={13} />Conflict</span> : null}
         {url ? (
           <a href={url} target="_blank" rel="noreferrer" aria-label={`Open ${service.label}`}>
             <ExternalLink size={15} />
@@ -439,6 +560,13 @@ function ServiceRow({ service }) {
       {service.note ? <p className="service-note">{service.note}</p> : null}
     </div>
   );
+}
+
+function formatTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function portsLabel(project) {

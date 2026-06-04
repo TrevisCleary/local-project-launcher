@@ -10,10 +10,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = path.join(APP_ROOT, "data");
 const OVERRIDES_FILE = path.join(DATA_DIR, "project-overrides.json");
+const REGISTRY_FILE = path.join(DATA_DIR, "project-registry.json");
+const ACTIVITY_FILE = path.join(DATA_DIR, "activity-log.json");
 const PORT = Number(process.env.LAUNCHER_API_PORT || 3059);
 const PROJECTS_ROOT = process.env.PROJECTS_ROOT || "C:\\Development\\Projects";
+const OPERATIONS_LIBRARY_ROOT = process.env.OPERATIONS_LIBRARY_ROOT || "C:\\Development\\Shared\\codex-operations-library";
 const MANAGED = new Map();
 const LOG_LIMIT = 120;
+const ACTIVITY_LIMIT = 200;
 const WORK_OWNERS = new Set(
   String(process.env.WORK_GITHUB_OWNERS || "")
     .split(",")
@@ -26,6 +30,14 @@ app.use(express.json());
 
 function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function safeReadJson(filePath) {
@@ -47,6 +59,24 @@ async function readJson(filePath, fallback = {}) {
 async function writeJson(filePath, value) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function appendActivity(projectId, action, message, meta = {}) {
+  const activity = await readJson(ACTIVITY_FILE, []);
+  activity.unshift({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    at: new Date().toISOString(),
+    projectId,
+    action,
+    message,
+    meta,
+  });
+  await writeJson(ACTIVITY_FILE, activity.slice(0, ACTIVITY_LIMIT));
+}
+
+async function projectActivity(projectId) {
+  const activity = await readJson(ACTIVITY_FILE, []);
+  return activity.filter((entry) => entry.projectId === projectId).slice(0, 20);
 }
 
 async function readIfExists(filePath) {
@@ -120,6 +150,31 @@ function githubOwner(origin = "") {
   return normalized.match(/github\.com[:/](?<owner>[^/]+)\//i)?.groups?.owner || "";
 }
 
+function runCapture(command, args, cwd) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd, windowsHide: true });
+    let stdout = "";
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+    child.on("error", () => resolve(""));
+    child.on("exit", (code) => resolve(code === 0 ? stdout.trim() : ""));
+  });
+}
+
+async function gitStatus(projectPath, lastSync = "") {
+  if (!fsSync.existsSync(path.join(projectPath, ".git"))) {
+    return { branch: "", dirty: false, lastSync };
+  }
+  const branch = await runCapture("git.exe", ["branch", "--show-current"], projectPath);
+  const status = await runCapture("git.exe", ["status", "--porcelain"], projectPath);
+  return {
+    branch,
+    dirty: Boolean(status),
+    lastSync,
+  };
+}
+
 function projectAudience(origin) {
   const owner = githubOwner(origin).toLowerCase();
   if (!owner) return "unknown";
@@ -189,6 +244,39 @@ function classifyScript(scriptName, command) {
   if (value.includes("api") || value.includes("server/index") || value.includes("backend")) return "api";
   if (value.includes("db:") || value.includes("postgres") || value.includes("migrate") || value.includes("seed")) return "database";
   return "primary";
+}
+
+function nextAssignedPort(projects, audience, kind = "primary") {
+  const ranges = {
+    "work:primary": 3100,
+    "work:api": 4100,
+    "personal:primary": 3200,
+    "personal:api": 4200,
+    "unknown:primary": 3300,
+    "unknown:api": 4300,
+  };
+  const base = ranges[`${audience}:${kind}`] || ranges["unknown:primary"];
+  const used = new Set(projects.flatMap((project) => project.services.map((service) => service.port).filter(Boolean)));
+  for (let port = base + 1; port < base + 100; port++) {
+    if (!used.has(port)) return port;
+  }
+  return base + 100;
+}
+
+function decoratePortCollisions(projects) {
+  const counts = new Map();
+  for (const project of projects) {
+    for (const service of project.services) {
+      if (service.port) counts.set(service.port, (counts.get(service.port) || 0) + 1);
+    }
+  }
+  return projects.map((project) => ({
+    ...project,
+    services: project.services.map((service) => ({
+      ...service,
+      portConflict: service.port ? counts.get(service.port) > 1 : false,
+    })),
+  }));
 }
 
 async function buildService(projectPath, pkg, files, scriptName, label, kind, options = {}) {
@@ -287,6 +375,8 @@ async function discoverProjects() {
         services,
         scripts: {},
         managed: false,
+        git: await gitStatus(projectPath, override.lastGitSync || ""),
+        activity: await projectActivity(id),
       }));
       continue;
     }
@@ -327,10 +417,12 @@ async function discoverProjects() {
       services,
       scripts,
       managed: Boolean(MANAGED.get(id)),
+      git: await gitStatus(projectPath, override.lastGitSync || ""),
+      activity: await projectActivity(id),
     }));
   }
 
-  return projects;
+  return decoratePortCollisions(projects);
 }
 
 function appendLog(projectId, line) {
@@ -441,6 +533,45 @@ async function takeOverProject(project) {
   await startProject(await findProject(project.id));
 }
 
+async function createRegisteredProject({ name, audience = "personal", port }) {
+  const projectName = String(name || "").trim();
+  if (!projectName) throw new Error("Project name is required.");
+  const folderName = slug(projectName);
+  const projectPath = path.join(PROJECTS_ROOT, folderName);
+  if (fsSync.existsSync(projectPath)) throw new Error(`Project path already exists: ${projectPath}`);
+
+  const existing = await discoverProjects();
+  const assignedPort = Number(port || nextAssignedPort(existing, audience, "primary"));
+  if (existing.some((project) => project.services.some((service) => service.port === assignedPort))) {
+    throw new Error(`Port ${assignedPort} is already assigned.`);
+  }
+
+  await fs.mkdir(path.join(projectPath, "docs"), { recursive: true });
+  await fs.writeFile(path.join(projectPath, "package.json"), `${JSON.stringify({
+    name: folderName,
+    version: "0.1.0",
+    private: true,
+    type: "module",
+    scripts: {
+      start: `set PORT=${assignedPort}&& node server.js`,
+    },
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(projectPath, "server.js"), `import http from "node:http";\n\nconst port = Number(process.env.PORT || ${assignedPort});\nconst name = ${JSON.stringify(projectName)};\n\nhttp.createServer((_req, res) => {\n  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });\n  res.end(\`<!doctype html><html><head><title>\${name}</title></head><body style="font-family:Segoe UI,sans-serif;padding:32px"><h1>\${name}</h1><p>Registered by Local Project Launcher.</p></body></html>\`);\n}).listen(port, "127.0.0.1", () => {\n  console.log(\`\${name} listening on http://localhost:\${port}\`);\n});\n`);
+  await fs.writeFile(path.join(projectPath, "README.md"), `# ${projectName}\n\nRegistered by Local Project Launcher on port ${assignedPort}.\n`);
+  await fs.writeFile(path.join(projectPath, "bootstrap-config.md"), `# Bootstrap Configuration\n\nGenerated By: Local Project Launcher\nProject Name: ${projectName}\nProject Root: ${projectPath}\nAssigned Port: ${assignedPort}\nOperations Library: ${OPERATIONS_LIBRARY_ROOT}\n\nNext Step: Use the Codex Operations Library new-project workflow to complete discovery, planning, and governance assets.\n`);
+  await fs.writeFile(path.join(projectPath, "docs", "operations-library-handoff.md"), `# Operations Library Handoff\n\nThis project was registered by Local Project Launcher and started immediately so it is visible in the development port map.\n\n- Project: ${projectName}\n- Path: ${projectPath}\n- Assigned Port: ${assignedPort}\n- Audience: ${audience}\n- Operations Library Root: ${OPERATIONS_LIBRARY_ROOT}\n\nRecommended Operations Library entry point:\n\n\`\`\`powershell\ncd ${OPERATIONS_LIBRARY_ROOT}\n.\\New-CodexProject.ps1 -BasePath ${PROJECTS_ROOT}\n\`\`\`\n\nIf this project already exists, use \`prompts/onboard-existing-project.md\`. If it is still being initiated, use \`prompts/start-new-project.md\`.\n`);
+
+  const registry = await readJson(REGISTRY_FILE, []);
+  registry.push({ id: folderName, name: projectName, path: projectPath, audience, assignedPort, createdAt: new Date().toISOString(), operationsLibraryRoot: OPERATIONS_LIBRARY_ROOT });
+  await writeJson(REGISTRY_FILE, registry);
+
+  await appendActivity(folderName, "register", `Registered project on port ${assignedPort}`, { projectPath, assignedPort, operationsLibraryRoot: OPERATIONS_LIBRARY_ROOT });
+  const project = await findProject(folderName);
+  await startProject(project);
+  await appendActivity(folderName, "start", "Started after registration", { assignedPort });
+  return await findProject(folderName);
+}
+
 async function startProject(project) {
   const runnable = project.services.filter((service) => service.available);
   if (!runnable.length) throw new Error("Project has no runnable dev service.");
@@ -463,11 +594,30 @@ app.get("/api/projects", async (_req, res) => {
   }
 });
 
+app.get("/api/ports/next", async (req, res) => {
+  try {
+    const audience = String(req.query.audience || "personal");
+    const kind = String(req.query.kind || "primary");
+    res.json({ port: nextAssignedPort(await discoverProjects(), audience, kind) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/projects/register", async (req, res) => {
+  try {
+    res.json(await createRegisteredProject(req.body || {}));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.post("/api/projects/:projectId/start", async (req, res) => {
   try {
     const project = await findProject(req.params.projectId);
     if (!project) return res.status(404).json({ error: "Project not found." });
     await startProject(project);
+    await appendActivity(project.id, "start", "Started managed services");
     res.json(await hydrateStatus(project));
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -481,6 +631,7 @@ app.post("/api/projects/:projectId/stop", async (req, res) => {
   if (project.status !== "running") return res.status(400).json({ error: "Project is not running." });
   if (!project.managedRunning) return res.status(400).json({ error: "Project is running outside the launcher." });
   await stopProject(projectId);
+  await appendActivity(projectId, "stop", "Stopped managed services");
   res.json(await findProject(projectId));
 });
 
@@ -492,6 +643,7 @@ app.post("/api/projects/:projectId/restart", async (req, res) => {
     if (!project.managedRunning) return res.status(400).json({ error: "Project is running outside the launcher." });
     await stopProject(project.id);
     await startProject(project);
+    await appendActivity(project.id, "restart", "Restarted managed services");
     res.json(await hydrateStatus(project));
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -505,6 +657,7 @@ app.post("/api/projects/:projectId/take-over", async (req, res) => {
     if (project.managedRunning) return res.status(400).json({ error: "Project is already managed by the launcher." });
     if (project.status !== "running") return res.status(400).json({ error: "Project is not running on an assigned port." });
     await takeOverProject(project);
+    await appendActivity(project.id, "take-over", "Took over externally running assigned port");
     res.json(await findProject(project.id));
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -519,6 +672,10 @@ app.post("/api/projects/:projectId/git-sync", async (req, res) => {
     const managed = MANAGED.get(project.id) || { services: new Map(), logs: [] };
     MANAGED.set(project.id, managed);
     await runProjectCommand(project, "git.exe", ["pull", "--ff-only"], "git sync");
+    const overrides = await readJson(OVERRIDES_FILE, {});
+    overrides[project.id] = { ...(overrides[project.id] || {}), lastGitSync: new Date().toISOString() };
+    await writeJson(OVERRIDES_FILE, overrides);
+    await appendActivity(project.id, "git-sync", "Synced repository with git pull --ff-only");
     res.json(await findProject(project.id));
   } catch (error) {
     res.status(400).json({ error: error.message });

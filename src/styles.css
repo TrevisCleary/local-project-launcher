@@ -24,6 +24,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -432,6 +433,11 @@ h3 {
   padding: 7px 8px 7px 10px;
 }
 
+.resource-row:has(.repo-badges) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(160px, auto) auto;
+}
+
 .resource-meta {
   min-width: 0;
   display: flex;
@@ -479,6 +485,40 @@ h3 {
   opacity: 0.55;
 }
 
+.primary-secondary {
+  background: #1f7a60;
+  border-color: #1f7a60;
+  color: #ffffff;
+}
+
+.repo-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.repo-badges span,
+.collision {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: #eef3f2;
+  color: #43554d;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.repo-badges .warn,
+.collision {
+  background: #fff3df;
+  color: #87531c;
+}
+
 .section-title {
   display: flex;
   align-items: center;
@@ -493,6 +533,43 @@ h3 {
 .services {
   display: grid;
   gap: 8px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 6px;
+}
+
+.activity-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e0e8e4;
+  border-radius: 8px;
+  background: #fbfcfc;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.activity-row strong {
+  color: #1f4f44;
+  text-transform: capitalize;
+}
+
+.activity-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-row small {
+  color: #66746e;
+}
+
+.compact-empty {
+  padding: 8px 10px;
 }
 
 .service-row {
@@ -614,7 +691,7 @@ h3 {
 .port-node {
   min-height: 58px;
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) auto;
+  grid-template-columns: 76px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   border: 1px solid #e0e8e4;
@@ -680,6 +757,45 @@ h3 {
   padding: 14px;
 }
 
+.register-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.register-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.register-form label span {
+  color: #43554d;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.register-form input,
+.register-form select {
+  height: 36px;
+  border: 1px solid #cfd9d4;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #14221b;
+  background: #ffffff;
+}
+
+.form-note {
+  color: #66746e;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 @media (max-width: 980px) {
   body {
     overflow: auto;
@@ -713,6 +829,7 @@ h3 {
   }
 
   .resource-row {
+    display: flex;
     align-items: stretch;
     flex-direction: column;
   }

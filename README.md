@@ -37,6 +37,8 @@ npm run dev
 - Hides Open, Restart, and Stop project actions unless the selected project is running.
 - Shows a Port Map modal from the top KPI row with discovered ports and open/closed status.
 - Runs `git pull --ff-only` for a selected project from the Repository Git Sync button when a GitHub remote exists.
+- Registers new starter projects with automatic port assignment, Operations Library handoff docs, immediate start, and normal auto-discovery.
+- Shows port collision warnings, repository branch/dirty/sync status, and a per-project activity timeline.
 - Infers work vs. personal projects from the GitHub remote owner.
 - Opens project folders in File Explorer from the displayed project path.
 - Stores edited project descriptions in `data/project-overrides.json`, which is ignored by Git.
@@ -45,6 +47,15 @@ npm run dev
 Projects that are already running outside this launcher are treated as running when one of their assigned ports is open. Stop and Restart are still limited to processes started by this launcher.
 
 Use Take Over on an externally running project to stop the listener on the assigned port and restart the project as a launcher-managed process.
+
+## Project Registration
+
+Use Add Project to create a minimal runnable project under `PROJECTS_ROOT`. The launcher assigns the next available primary port by audience:
+
+- Work application ports start at `3101`.
+- Personal application ports start at `3201`.
+
+Registration writes `bootstrap-config.md` and `docs/operations-library-handoff.md` into the new project. Those files point back to the Codex Operations Library and preserve the next workflow entry points. The launcher starts the project immediately, then the normal 5-second discovery cycle keeps it visible.
 
 ## Refresh Cadence
 

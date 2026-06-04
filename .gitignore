@@ -2,5 +2,7 @@ node_modules/
 dist/
 .launcher-logs/
 data/project-overrides.json
+data/project-registry.json
+data/activity-log.json
 dashboard-preview.png
 npm-debug.log*
