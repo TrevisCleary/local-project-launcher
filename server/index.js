@@ -368,6 +368,26 @@ function stopProcessTree(pid) {
   });
 }
 
+function listenerPidsForPort(port) {
+  return new Promise((resolve) => {
+    if (!port) return resolve([]);
+    const command = `Get-NetTCPConnection -LocalPort ${Number(port)} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique`;
+    const child = spawn("powershell.exe", ["-NoProfile", "-Command", command], { windowsHide: true });
+    let output = "";
+    child.stdout.on("data", (data) => {
+      output += data.toString();
+    });
+    child.on("error", () => resolve([]));
+    child.on("exit", () => {
+      const pids = output
+        .split(/\s+/)
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0);
+      resolve([...new Set(pids)]);
+    });
+  });
+}
+
 function runProjectCommand(project, command, args, label) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -398,6 +418,27 @@ async function stopProject(projectId) {
   managed.services.clear();
   appendLog(projectId, "[launcher] stopped managed services");
   return true;
+}
+
+async function takeOverProject(project) {
+  const managed = MANAGED.get(project.id) || { services: new Map(), logs: [] };
+  MANAGED.set(project.id, managed);
+
+  const openServices = project.services.filter((service) => service.available && service.port && service.portStatus === "open");
+  if (!openServices.length) throw new Error("No assigned open ports found to take over.");
+
+  const pids = new Set();
+  for (const service of openServices) {
+    for (const pid of await listenerPidsForPort(service.port)) {
+      pids.add(pid);
+    }
+  }
+  if (!pids.size) throw new Error("No listener process found for the assigned open ports.");
+
+  appendLog(project.id, `[launcher] taking over ports ${openServices.map((service) => service.port).join(", ")}`);
+  await Promise.all([...pids].map((pid) => stopProcessTree(pid)));
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  await startProject(await findProject(project.id));
 }
 
 async function startProject(project) {
@@ -452,6 +493,19 @@ app.post("/api/projects/:projectId/restart", async (req, res) => {
     await stopProject(project.id);
     await startProject(project);
     res.json(await hydrateStatus(project));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/api/projects/:projectId/take-over", async (req, res) => {
+  try {
+    const project = await findProject(req.params.projectId);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (project.managedRunning) return res.status(400).json({ error: "Project is already managed by the launcher." });
+    if (project.status !== "running") return res.status(400).json({ error: "Project is not running on an assigned port." });
+    await takeOverProject(project);
+    res.json(await findProject(project.id));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

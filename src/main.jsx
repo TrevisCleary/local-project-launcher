@@ -170,6 +170,7 @@ function App() {
             onStart={() => runAction(selected.id, "start")}
             onStop={() => runAction(selected.id, "stop")}
             onRestart={() => runAction(selected.id, "restart")}
+            onTakeOver={() => runAction(selected.id, "take-over")}
             onGitSync={() => runAction(selected.id, "git-sync")}
             onSaveDescription={(description) => saveDescription(selected.id, description)}
             onOpenFolder={() => openFolder(selected.id)}
@@ -204,7 +205,7 @@ function Metric({ label, value, icon }) {
   );
 }
 
-function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, onSaveDescription, onOpenFolder }) {
+function ProjectDetail({ project, busy, onStart, onStop, onRestart, onTakeOver, onGitSync, onSaveDescription, onOpenFolder }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project.description);
   const isBusy = busy.startsWith(`${project.id}:`);
@@ -212,6 +213,7 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, o
   const hasManagedRunning = project.managedRunning || project.services.some((service) => service.managedRunning);
   const canStart = !isBusy && !isRunning && project.services.some((service) => service.available);
   const canUseManagedActions = !isBusy && hasManagedRunning;
+  const canTakeOver = !isBusy && isRunning && !hasManagedRunning && project.services.some((service) => service.available && service.portStatus === "open");
   const primary = project.services.find((service) => service.kind === "primary" && service.port);
   const canOpenPrimary = isRunning && primary?.port && (primary?.managedRunning || primary?.portStatus === "open");
   const primaryUrl = canOpenPrimary ? `http://localhost:${primary.port}` : "";
@@ -242,6 +244,12 @@ function ProjectDetail({ project, busy, onStart, onStop, onRestart, onGitSync, o
             <Play size={16} />
             Start
           </button>
+          {canTakeOver ? (
+            <button className="take-over" onClick={onTakeOver}>
+              <RotateCw size={16} />
+              Take Over
+            </button>
+          ) : null}
           {hasManagedRunning ? (
             <>
               <button className="restart" disabled={!canUseManagedActions} onClick={onRestart}>

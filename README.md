@@ -33,6 +33,7 @@ npm run dev
 - Starts all discovered services for a project with one Start button.
 - Stops only processes started by this launcher with one Stop button.
 - Restarts services with one Restart button.
+- Takes over manually started projects by stopping the process on the assigned open port and restarting through the launcher.
 - Hides Open, Restart, and Stop project actions unless the selected project is running.
 - Shows a Port Map modal from the top KPI row with discovered ports and open/closed status.
 - Runs `git pull --ff-only` for a selected project from the Repository Git Sync button when a GitHub remote exists.
@@ -42,6 +43,8 @@ npm run dev
 - Displays project favicons when a known favicon/icon file exists.
 
 Projects that are already running outside this launcher are treated as running when one of their assigned ports is open. Stop and Restart are still limited to processes started by this launcher.
+
+Use Take Over on an externally running project to stop the listener on the assigned port and restart the project as a launcher-managed process.
 
 ## Refresh Cadence
 
